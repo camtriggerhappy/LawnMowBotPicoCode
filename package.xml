@@ -6,4 +6,5 @@
   <description>micro-ROS tools for Raspberry Pico SDK</description>
   <maintainer email="pablogarrido@eprosima.com">Pablo Garrido</maintainer>
   <license>Apache License 2.0</license>
+    <exec_depend>nav_msgs</exec_depend>
 </package>

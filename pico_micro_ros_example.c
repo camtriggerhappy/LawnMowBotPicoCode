@@ -5,20 +5,54 @@
 #include <rclc/rclc.h>
 #include <rclc/executor.h>
 #include <std_msgs/msg/int32.h>
+#include <nav_msgs/msg/odometry.h>
+#include <geometry_msgs/msg/twist.h>
+
 #include <rmw_microros/rmw_microros.h>
 
 #include "pico/stdlib.h"
 #include "pico_uart_transports.h"
 
+
+#include "hardware/gpio.h"
+#include "hardware/sync.h"
+
+#include "hardware/structs/iobank0.h"
+#include "hardware/irq.h"
+
 const uint LED_PIN = 25;
+const uint motorPinA = 14;
+const uint motorPinB = 15;
 
 rcl_publisher_t publisher;
 std_msgs__msg__Int32 msg;
+// nav_msgs__msg__Odometry odom;
+int32_t counterRight = 0;
+unsigned long timeSinceLastCall;
+// rcl_publisher_t odomPublisher;
+rcl_subscription_t cmdVelSubscriber;
+
 
 void timer_callback(rcl_timer_t *timer, int64_t last_call_time)
 {
     rcl_ret_t ret = rcl_publish(&publisher, &msg, NULL);
-    msg.data++;
+    msg.data = counterRight;
+}
+
+
+void handleCallback(int pin){
+    if((to_ms_since_boot(get_absolute_time()) - timeSinceLastCall) > 5){
+    counterRight++;
+    timeSinceLastCall = to_ms_since_boot(get_absolute_time());
+    }
+    
+    
+
+}
+
+void drive(const void * msgin){
+      const geometry_msgs__msg__Twist * msg = (const geometry_msgs__msg__Twist *)msgin;
+ 
 }
 
 int main()
@@ -34,6 +68,8 @@ int main()
 
     gpio_init(LED_PIN);
     gpio_set_dir(LED_PIN, GPIO_OUT);
+    timeSinceLastCall = 0;
+    gpio_set_irq_enabled_with_callback(0, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true, &handleCallback);
 
     rcl_timer_t timer;
     rcl_node_t node;
@@ -63,6 +99,20 @@ int main()
         &node,
         ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Int32),
         "pico_publisher");
+   
+//    rclc_publisher_init_default(
+//         &odomPublisher,
+//         &node,
+//         ROSIDL_GET_MSG_TYPE_SUPPORT(nav_msgs, msg, Odometry),
+//         "pico_publisher_Odom");
+
+    rclc_subscription_init_default(
+        &cmdVelSubscriber,
+        &node,
+        ROSIDL_GET_MSG_TYPE_SUPPORT(geometry_msgs, msg, Twist),
+        "cmd_vel"
+    );
+
 
     rclc_timer_init_default(
         &timer,
@@ -72,6 +122,11 @@ int main()
 
     rclc_executor_init(&executor, &support.context, 1, &allocator);
     rclc_executor_add_timer(&executor, &timer);
+       rcl_ret_t rc = rclc_executor_add_subscription(
+        &cmdVelSubscriber, &node,
+        &drive, ON_NEW_DATA
+    );
+    
 
     gpio_put(LED_PIN, 1);
 
