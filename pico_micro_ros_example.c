@@ -19,30 +19,56 @@
 
 #include "hardware/structs/iobank0.h"
 #include "hardware/irq.h"
-
+#include "math.h"
 const uint LED_PIN = 25;
-const uint motorPinA = 14;
-const uint motorPinB = 15;
+const uint motorPin1A = 14;// speed
+const uint motorPin1B = 15;// direction
+
+const uint motorPin2A = 14; // controls speed
+const uint motorPin2B = 15; // controls direction
 
 rcl_publisher_t publisher;
 std_msgs__msg__Int32 msg;
 // nav_msgs__msg__Odometry odom;
 int32_t counterRight = 0;
+int32_t counterLeft = 0;
 unsigned long timeSinceLastCall;
 // rcl_publisher_t odomPublisher;
 rcl_subscription_t cmdVelSubscriber;
+float leftSpeed, rightSpeed = 0;
+const float radius = 32.5/1000;
+int32_t countsPerRot = 20;
+
+
+gpio_init(motorPin1A);
+gpio_init(motorPin1B);
+_Bool out = true;
+
+
+
 
 
 void timer_callback(rcl_timer_t *timer, int64_t last_call_time)
 {
     rcl_ret_t ret = rcl_publish(&publisher, &msg, NULL);
-    msg.data = counterRight;
+
+    leftSpeed = ((counterLeft/countsPerRot) * (M_PI/10)/1) * radius;
+    rightSpeed = ((counterRight/countsPerRot) * (M_PI/10)/1) * radius;
+
+    //in meters per second
 }
 
+void (* rclc_subscription_callback_t)(const void *);
 
-void handleCallback(int pin){
+void handleCallback(uint pin, uint32_t event_mask){
     if((to_ms_since_boot(get_absolute_time()) - timeSinceLastCall) > 5){
-    counterRight++;
+    if(pin == 0){
+        counterRight++;
+    }
+    else if(pin == 0){
+        counterLeft++;
+    }
+    
     timeSinceLastCall = to_ms_since_boot(get_absolute_time());
     }
     
@@ -52,6 +78,9 @@ void handleCallback(int pin){
 
 void drive(const void * msgin){
       const geometry_msgs__msg__Twist * msg = (const geometry_msgs__msg__Twist *)msgin;
+
+        gpio_put(motorPin1A, 1);
+
  
 }
 
@@ -93,6 +122,9 @@ int main()
 
     rclc_support_init(&support, 0, NULL, &allocator);
 
+    gpio_set_dir(motorPin1A, out);
+    gpio_set_dir(motorPin1B, out);
+
     rclc_node_init_default(&node, "pico_node", "", &support);
     rclc_publisher_init_default(
         &publisher,
@@ -123,6 +155,7 @@ int main()
     rclc_executor_init(&executor, &support.context, 1, &allocator);
     rclc_executor_add_timer(&executor, &timer);
        rcl_ret_t rc = rclc_executor_add_subscription(
+        &executor,
         &cmdVelSubscriber, &node,
         &drive, ON_NEW_DATA
     );
