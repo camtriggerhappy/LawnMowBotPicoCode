@@ -19,19 +19,21 @@
 
 #include "hardware/structs/iobank0.h"
 #include "hardware/irq.h"
+#include "hardware/pwm.h"
 #include "math.h"
 const uint LED_PIN = 25;
 const uint motorPin1A = 14;// speed
 const uint motorPin1B = 15;// direction
 
-const uint motorPin2A = 14; // controls speed
-const uint motorPin2B = 15; // controls direction
+const uint motorPin2A = 1; // controls speed
+const uint motorPin2B = 0; // controls direction
 
 rcl_publisher_t publisher;
-std_msgs__msg__Int32 msg;
+std_msgs__msg__Int32 msg1;
+geometry_msgs__msg__Twist msg3;
 // nav_msgs__msg__Odometry odom;
-int32_t counterRight = 0;
-int32_t counterLeft = 0;
+int32_t counterRight = 8;
+int32_t counterLeft = 9;
 unsigned long timeSinceLastCall;
 // rcl_publisher_t odomPublisher;
 rcl_subscription_t cmdVelSubscriber;
@@ -40,9 +42,9 @@ const float radius = 32.5/1000;
 int32_t countsPerRot = 20;
 
 
-gpio_init(motorPin1A);
-gpio_init(motorPin1B);
-_Bool out = true;
+// gpio_init(motorPin1A);
+// gpio_init(motorPin1B);
+
 
 
 
@@ -50,7 +52,7 @@ _Bool out = true;
 
 void timer_callback(rcl_timer_t *timer, int64_t last_call_time)
 {
-    rcl_ret_t ret = rcl_publish(&publisher, &msg, NULL);
+    rcl_ret_t ret = rcl_publish(&publisher, &msg1, NULL);
 
     leftSpeed = ((counterLeft/countsPerRot) * (M_PI/10)/1) * radius;
     rightSpeed = ((counterRight/countsPerRot) * (M_PI/10)/1) * radius;
@@ -58,7 +60,7 @@ void timer_callback(rcl_timer_t *timer, int64_t last_call_time)
     //in meters per second
 }
 
-void (* rclc_subscription_callback_t)(const void *);
+// void (* rclc_subscription_callback_t)(const void *);
 
 void handleCallback(uint pin, uint32_t event_mask){
     if((to_ms_since_boot(get_absolute_time()) - timeSinceLastCall) > 5){
@@ -76,12 +78,36 @@ void handleCallback(uint pin, uint32_t event_mask){
 
 }
 
+int PIDController(float KP,float error){
+    return KP * error;
+
+
+
+}
+
+
 void drive(const void * msgin){
       const geometry_msgs__msg__Twist * msg = (const geometry_msgs__msg__Twist *)msgin;
 
-        gpio_put(motorPin1A, 1);
+        
+        gpio_put(motorPin1B, false);
+        pwm_set_gpio_level(motorPin1A, 50);
 
- 
+
+        
+        pwm_set_gpio_level(motorPin1A, 50);
+        gpio_put(motorPin2B, false);
+        msg1.data = (int)msg->linear.x;
+}
+
+void stop(){
+
+        gpio_put(motorPin1A, false);
+        gpio_put(motorPin1B, false);
+        
+        gpio_put(motorPin1A, false);
+        gpio_put(motorPin1B, false);
+
 }
 
 int main()
@@ -95,8 +121,33 @@ int main()
 		pico_serial_transport_read
 	);
 
-    gpio_init(LED_PIN);
-    gpio_set_dir(LED_PIN, GPIO_OUT);
+        gpio_init(LED_PIN);
+        gpio_set_dir(LED_PIN, GPIO_OUT);
+        
+        gpio_init(motorPin1A);
+        gpio_set_dir(motorPin1A, GPIO_OUT);
+        gpio_set_function(motorPin1A, GPIO_FUNC_PWM);
+        uint sliceNum = pwm_gpio_to_slice_num(motorPin1A);
+        pwm_config config = pwm_get_default_config();
+        pwm_init(sliceNum, &config, true);
+        
+        gpio_init(motorPin1B);
+        gpio_set_dir(motorPin1B, GPIO_OUT);
+
+        gpio_init(motorPin2A);
+        gpio_set_dir(motorPin2A, GPIO_OUT);
+        gpio_set_function(motorPin2A, GPIO_FUNC_PWM);
+        uint sliceNum2 = pwm_gpio_to_slice_num(motorPin2A);
+        pwm_init(sliceNum2, &config, true);
+
+
+        gpio_init(motorPin2B);
+        gpio_set_dir(motorPin2B, GPIO_OUT);
+
+
+
+
+
     timeSinceLastCall = 0;
     gpio_set_irq_enabled_with_callback(0, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true, &handleCallback);
 
@@ -104,7 +155,7 @@ int main()
     rcl_node_t node;
     rcl_allocator_t allocator;
     rclc_support_t support;
-    rclc_executor_t executor;
+    rclc_executor_t executor = rclc_executor_get_zero_initialized_executor();
 
     allocator = rcl_get_default_allocator();
 
@@ -122,8 +173,8 @@ int main()
 
     rclc_support_init(&support, 0, NULL, &allocator);
 
-    gpio_set_dir(motorPin1A, out);
-    gpio_set_dir(motorPin1B, out);
+    gpio_set_dir(motorPin1A, true);
+    gpio_set_dir(motorPin1B, true);
 
     rclc_node_init_default(&node, "pico_node", "", &support);
     rclc_publisher_init_default(
@@ -151,22 +202,36 @@ int main()
         &support,
         RCL_MS_TO_NS(1000),
         timer_callback);
+    unsigned int handles = 1;
 
-    rclc_executor_init(&executor, &support.context, 1, &allocator);
+    rclc_executor_init(&executor, &support.context, 3, &allocator);
+    
     rclc_executor_add_timer(&executor, &timer);
-       rcl_ret_t rc = rclc_executor_add_subscription(
+       
+    rcl_ret_t rc = rclc_executor_add_subscription(
         &executor,
-        &cmdVelSubscriber, &node,
+        &cmdVelSubscriber, &msg3,
         &drive, ON_NEW_DATA
     );
     
 
     gpio_put(LED_PIN, 1);
+    
+    
+    msg1.data = 0;
+    
+    
+    
+    if (RCL_RET_ERROR == rc) {
+        msg1.data = 420;
+        
+        }
 
-    msg.data = 0;
+    
     while (true)
     {
         rclc_executor_spin_some(&executor, RCL_MS_TO_NS(100));
     }
+    stop();
     return 0;
 }
