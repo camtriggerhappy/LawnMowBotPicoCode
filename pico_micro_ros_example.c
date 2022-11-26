@@ -57,6 +57,9 @@ void timer_callback(rcl_timer_t *timer, int64_t last_call_time)
     leftSpeed = ((counterLeft/countsPerRot) * (M_PI/10)/1) * radius;
     rightSpeed = ((counterRight/countsPerRot) * (M_PI/10)/1) * radius;
 
+
+    msg1.data = (int)(rightSpeed * 1000);
+    
     //in meters per second
 }
 
@@ -89,15 +92,24 @@ int PIDController(float KP,float error){
 void drive(const void * msgin){
       const geometry_msgs__msg__Twist * msg = (const geometry_msgs__msg__Twist *)msgin;
 
-        
+        if(msg->linear.x < 0){
         gpio_put(motorPin1B, false);
-        pwm_set_gpio_level(motorPin1A, 50);
+        gpio_put(motorPin2B, false);
+        }
+
+
+        else if(msg->linear.x > 0){
+        gpio_put(motorPin1B, true);
+        gpio_put(motorPin2B, true);
+        }
+        
+        pwm_set_gpio_level(motorPin1A, (int)65535/2);
 
 
         
-        pwm_set_gpio_level(motorPin1A, 50);
-        gpio_put(motorPin2B, false);
-        msg1.data = (int)msg->linear.x;
+        pwm_set_gpio_level(motorPin2A, (int)65535/2);
+
+        
 }
 
 void stop(){
