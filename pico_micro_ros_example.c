@@ -5,6 +5,7 @@
 #include <rclc/rclc.h>
 #include <rclc/executor.h>
 #include <std_msgs/msg/int32.h>
+
 #include <nav_msgs/msg/odometry.h>
 #include <geometry_msgs/msg/twist.h>
 
@@ -32,15 +33,15 @@ rcl_publisher_t publisher;
 std_msgs__msg__Int32 msg1;
 geometry_msgs__msg__Twist msg3;
 // nav_msgs__msg__Odometry odom;
-int32_t counterRight = 8;
-int32_t counterLeft = 9;
+int32_t counterRight = 0;
+int32_t counterLeft = 0;
 unsigned long timeSinceLastCall;
 // rcl_publisher_t odomPublisher;
 rcl_subscription_t cmdVelSubscriber;
 float leftSpeed, rightSpeed = 0;
 const float radius = 32.5/1000;
 int32_t countsPerRot = 20;
-
+const float pi = 3.1415926;
 
 // gpio_init(motorPin1A);
 // gpio_init(motorPin1B);
@@ -54,11 +55,11 @@ void timer_callback(rcl_timer_t *timer, int64_t last_call_time)
 {
     rcl_ret_t ret = rcl_publish(&publisher, &msg1, NULL);
 
-    leftSpeed = ((counterLeft/countsPerRot) * (M_PI/10)/1) * radius;
-    rightSpeed = ((counterRight/countsPerRot) * (M_PI/10)/1) * radius;
+    leftSpeed = (((counterLeft % 20)/countsPerRot) * (pi/10)/1) * radius;
+    rightSpeed = (((counterRight % 20)/countsPerRot) * (pi/10)/1) * radius;
 
 
-    msg1.data = (int)(rightSpeed * 1000);
+    msg1.data = (int32_t)(rightSpeed * 1000000);
     
     //in meters per second
 }
@@ -67,10 +68,10 @@ void timer_callback(rcl_timer_t *timer, int64_t last_call_time)
 
 void handleCallback(uint pin, uint32_t event_mask){
     if((to_ms_since_boot(get_absolute_time()) - timeSinceLastCall) > 5){
-    if(pin == 0){
+    if(pin == 8){
         counterRight++;
     }
-    else if(pin == 0){
+    else if(pin == 9){
         counterLeft++;
     }
     
@@ -102,12 +103,13 @@ void drive(const void * msgin){
         gpio_put(motorPin1B, true);
         gpio_put(motorPin2B, true);
         }
+        else stop();
         
-        pwm_set_gpio_level(motorPin1A, (int)65535/2);
+        pwm_set_gpio_level(motorPin1A, (int)65535 *.8);
 
 
         
-        pwm_set_gpio_level(motorPin2A, (int)65535/2);
+        pwm_set_gpio_level(motorPin2A, (int)65535 * .8);
 
         
 }
@@ -161,8 +163,8 @@ int main()
 
 
     timeSinceLastCall = 0;
-    gpio_set_irq_enabled_with_callback(0, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true, &handleCallback);
-
+    gpio_set_irq_enabled_with_callback(8, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true, &handleCallback);
+    gpio_set_irq_enabled(9, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true);
     rcl_timer_t timer;
     rcl_node_t node;
     rcl_allocator_t allocator;
