@@ -54,9 +54,11 @@ const float pi = 3.1415926;
 void timer_callback(rcl_timer_t *timer, int64_t last_call_time)
 {
     rcl_ret_t ret = rcl_publish(&publisher, &msg1, NULL);
+    float subRotsLeft = counterLeft % countsPerRot;
+    float subRotsRight = counterRight % countsPerRot;
 
-    leftSpeed = (((counterLeft % 20)/countsPerRot) * (pi/10)/1) * radius;
-    rightSpeed = (((counterRight % 20)/countsPerRot) * (pi/10)/1) * radius;
+    leftSpeed = (((subRotsLeft)/countsPerRot) * (pi/10)/1) * radius;
+    rightSpeed = (((subRotsRight)/countsPerRot) * (pi/10)/1) * radius;
 
 
     msg1.data = (int32_t)(rightSpeed * 1000000);
@@ -105,11 +107,11 @@ void drive(const void * msgin){
         }
         else stop();
         
-        pwm_set_gpio_level(motorPin1A, (int)65535 *.8);
+        pwm_set_gpio_level(motorPin1A, (int)65535/2);
 
 
         
-        pwm_set_gpio_level(motorPin2A, (int)65535 * .8);
+        pwm_set_gpio_level(motorPin2A, (int)65535/2);
 
         
 }
