@@ -39,7 +39,7 @@ unsigned long timeSinceLastCall;
 // rcl_publisher_t odomPublisher;
 rcl_subscription_t cmdVelSubscriber;
 float leftSpeed, rightSpeed = 0;
-const float radius = 32.5/1000;
+const float radius = .065/2;
 int32_t countsPerRot = 20;
 const float pi = 3.1415926;
 
