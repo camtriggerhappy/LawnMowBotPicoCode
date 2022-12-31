@@ -44,9 +44,11 @@ const float radius = .065/2;
 int32_t countsPerRot = 20;
 const float pi = 3.1415926;
 float trackWidth = .11214; //m
-int timeStep = 50; // ms
+int timeStep = 100; // ms
 float errorSumLeft = 0;
 float errorSumRight = 0;
+float lastErrorRight = 0;
+float lastErrorLeft = 0;
 // gpio_init(motorPin1A);
 // gpio_init(motorPin1B);
 
@@ -94,11 +96,12 @@ void handleCallback(uint pin, uint32_t event_mask){
 
 }
 
-int PIDController(float KP,float KI ,float error, int pin){
+int PIDController(float error, int pin){
     bool useLeft = false;
     if(pin == motorPin1B){
         errorSumLeft += error * (timeStep/1000);
         useLeft = true;
+
 
     }
     else if(pin == motorPin2B){
@@ -107,10 +110,14 @@ int PIDController(float KP,float KI ,float error, int pin){
     bool negative = false;
     float output = 0;
     if(useLeft){
-     output = (KP * error) + KI * errorSumLeft;
+     output = -160627 * error;
+     //(KP * error) + KI * errorSumLeft + KD * (error - lastErrorLeft);
+     lastErrorLeft = error;
     }
     else{
-     output = (KP * error) + KI * errorSumRight;
+     output = output = -160627 * error;
+     //(KP * error) + KI * errorSumRight + KD * (error - lastErrorRight) ;
+     lastErrorRight = error;
     }
     output = (output) * (65535);
     if(output < 0){
@@ -127,7 +134,7 @@ int PIDController(float KP,float KI ,float error, int pin){
     // else if(!negative){
     //     gpio_put(pin, true);
     // }
-    return 65535 - output;
+    return 65535 + output;
 }
 
 
@@ -148,11 +155,11 @@ void drive(const void * msgin){
             stop();
         }
         float commandVelLeft = ((msg->linear.x / radius) );
-        float leftVel = PIDController(163837.5,200 , msg->linear.x - leftSpeed, motorPin1B);
+        float leftVel = PIDController( msg->linear.x , motorPin1B);
         pwm_set_gpio_level(motorPin1A, (leftVel));
 
 
-        float rightVel = PIDController(163837.5, 200,  msg->linear.x - rightSpeed, motorPin2B);
+        float rightVel = PIDController(msg->linear.x , motorPin2B);
         pwm_set_gpio_level(motorPin2A, rightVel);
 
         
