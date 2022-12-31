@@ -110,12 +110,12 @@ int PIDController(float error, int pin){
     bool negative = false;
     float output = 0;
     if(useLeft){
-     output = -160627 * error;
+     output = 160627 * error;
      //(KP * error) + KI * errorSumLeft + KD * (error - lastErrorLeft);
      lastErrorLeft = error;
     }
     else{
-     output = output = -160627 * error;
+     output = 160627 * error;
      //(KP * error) + KI * errorSumRight + KD * (error - lastErrorRight) ;
      lastErrorRight = error;
     }
@@ -134,7 +134,7 @@ int PIDController(float error, int pin){
     // else if(!negative){
     //     gpio_put(pin, true);
     // }
-    return 65535 + output;
+    return 65535 - output;
 }
 
 
