@@ -5,6 +5,7 @@
 #include <rclc/rclc.h>
 #include <rclc/executor.h>
 #include <std_msgs/msg/int32.h>
+#include <std_msgs/msg/float32.h>
 
 #include <nav_msgs/msg/odometry.h>
 #include <geometry_msgs/msg/twist.h>
@@ -30,7 +31,7 @@ const uint motorPin2A = 1; // controls speed
 const uint motorPin2B = 0; // controls direction
 
 rcl_publisher_t publisher;
-std_msgs__msg__Int32 msg1;
+std_msgs__msg__Float32 msg1;
 geometry_msgs__msg__Twist msg3;
 // nav_msgs__msg__Odometry odom;
 int32_t counterRight = 0;
@@ -42,7 +43,10 @@ float leftSpeed, rightSpeed = 0;
 const float radius = .065/2;
 int32_t countsPerRot = 20;
 const float pi = 3.1415926;
-
+float trackWidth = .11214; //m
+int timeStep = 50; // ms
+float errorSumLeft = 0;
+float errorSumRight = 0;
 // gpio_init(motorPin1A);
 // gpio_init(motorPin1B);
 
@@ -51,17 +55,23 @@ const float pi = 3.1415926;
 
 
 
+
 void timer_callback(rcl_timer_t *timer, int64_t last_call_time)
 {
+    
     rcl_ret_t ret = rcl_publish(&publisher, &msg1, NULL);
-    float subRotsLeft = counterLeft % countsPerRot;
-    float subRotsRight = counterRight % countsPerRot;
+    float subRotsLeft = counterLeft;
+    float subRotsRight = counterRight ;
 
-    leftSpeed = (((subRotsLeft)/countsPerRot) * (pi/10)/1) * radius;
-    rightSpeed = (((subRotsRight)/countsPerRot) * (pi/10)/1) * radius;
+    leftSpeed = (((subRotsLeft)) * ((pi/10)/((float) timeStep/1000))) * radius;
+    rightSpeed = (((subRotsRight)) * ((pi/10)/((float) timeStep/1000))) * radius;
 
 
-    msg1.data = (int32_t)(rightSpeed * 1000000);
+    msg1.data = (leftSpeed );
+
+
+    counterLeft = 0;
+    counterRight = 0;
     
     //in meters per second
 }
@@ -69,7 +79,7 @@ void timer_callback(rcl_timer_t *timer, int64_t last_call_time)
 // void (* rclc_subscription_callback_t)(const void *);
 
 void handleCallback(uint pin, uint32_t event_mask){
-    if((to_ms_since_boot(get_absolute_time()) - timeSinceLastCall) > 5){
+    if((to_ms_since_boot(get_absolute_time()) - timeSinceLastCall) > 0){
     if(pin == 8){
         counterRight++;
     }
@@ -84,11 +94,40 @@ void handleCallback(uint pin, uint32_t event_mask){
 
 }
 
-int PIDController(float KP,float error){
-    return KP * error;
+int PIDController(float KP,float KI ,float error, int pin){
+    bool useLeft = false;
+    if(pin == motorPin1B){
+        errorSumLeft += error * (timeStep/1000);
+        useLeft = true;
 
-
-
+    }
+    else if(pin == motorPin2B){
+        errorSumRight += error * (timeStep/1000);
+    }
+    bool negative = false;
+    float output = 0;
+    if(useLeft){
+     output = (KP * error) + KI * errorSumLeft;
+    }
+    else{
+     output = (KP * error) + KI * errorSumRight;
+    }
+    output = (output) * (65535);
+    if(output < 0){
+        output = 0;
+        negative = true;
+    }
+     if(output > 65535 ){
+        output = 65535;
+        negative = false;
+    }
+    // if(negative){
+    //     gpio_put(pin, false);
+    // }
+    // else if(!negative){
+    //     gpio_put(pin, true);
+    // }
+    return 65535 - output;
 }
 
 
@@ -105,13 +144,16 @@ void drive(const void * msgin){
         gpio_put(motorPin1B, true);
         gpio_put(motorPin2B, true);
         }
-        else stop();
-        
-        pwm_set_gpio_level(motorPin1A, (int)65535/2);
+        else{ 
+            stop();
+        }
+        float commandVelLeft = ((msg->linear.x / radius) );
+        float leftVel = PIDController(163837.5,200 , msg->linear.x - leftSpeed, motorPin1B);
+        pwm_set_gpio_level(motorPin1A, (leftVel));
 
 
-        
-        pwm_set_gpio_level(motorPin2A, (int)65535/2);
+        float rightVel = PIDController(163837.5, 200,  msg->linear.x - rightSpeed, motorPin2B);
+        pwm_set_gpio_level(motorPin2A, rightVel);
 
         
 }
@@ -196,7 +238,7 @@ int main()
     rclc_publisher_init_default(
         &publisher,
         &node,
-        ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Int32),
+        ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float32),
         "pico_publisher");
    
 //    rclc_publisher_init_default(
@@ -216,7 +258,7 @@ int main()
     rclc_timer_init_default(
         &timer,
         &support,
-        RCL_MS_TO_NS(1000),
+        RCL_MS_TO_NS(timeStep),
         timer_callback);
     unsigned int handles = 1;
 
