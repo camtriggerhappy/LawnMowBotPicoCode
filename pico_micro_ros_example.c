@@ -51,7 +51,10 @@ float lastErrorRight = 0;
 float lastErrorLeft = 0;
 // gpio_init(motorPin1A);
 // gpio_init(motorPin1B);
-
+long  leftLastTime = 0;
+long  rightLastTime = 0;
+float leftVelocityAccumulator = 0;
+long lastcallbacktime = 0;
 
 
 
@@ -65,8 +68,10 @@ void timer_callback(rcl_timer_t *timer, int64_t last_call_time)
     float subRotsLeft = counterLeft;
     float subRotsRight = counterRight ;
 
-    leftSpeed = (((subRotsLeft)) * ((pi/10)/((float) timeStep/1000))) * radius;
-    rightSpeed = (((subRotsRight)) * ((pi/10)/((float) timeStep/1000))) * radius;
+    // leftSpeed = (((subRotsLeft)) * ((pi/10)/((float) timeStep/1000))) * radius;
+    // rightSpeed = (((subRotsRight)) * ((pi/10)/((float) timeStep/1000))) * radius;
+
+    leftSpeed = leftVelocityAccumulator/(to_ms_since_boot(get_absolute_time()) - lastcallbacktime);
 
 
     msg1.data = (leftSpeed );
@@ -74,7 +79,8 @@ void timer_callback(rcl_timer_t *timer, int64_t last_call_time)
 
     counterLeft = 0;
     counterRight = 0;
-    
+    lastcallbacktime = to_ms_since_boot(get_absolute_time());
+    leftVelocityAccumulator = 0;
     //in meters per second
 }
 
@@ -84,9 +90,12 @@ void handleCallback(uint pin, uint32_t event_mask){
     if((to_ms_since_boot(get_absolute_time()) - timeSinceLastCall) > 0){
     if(pin == 8){
         counterRight++;
+
     }
     else if(pin == 9){
-        counterLeft++;
+
+        leftVelocityAccumulator += ((pi/10)/(to_ms_since_boot(get_absolute_time()) - leftLastTime) * radius);
+        leftLastTime = to_ms_since_boot(get_absolute_time());
     }
     
     timeSinceLastCall = to_ms_since_boot(get_absolute_time());
@@ -119,7 +128,7 @@ int PIDController(float error, int pin){
      //(KP * error) + KI * errorSumRight + KD * (error - lastErrorRight) ;
      lastErrorRight = error;
     }
-    output = (output) * (65535);
+    output = (output);
     if(output < 0){
         output = 0;
         negative = true;
